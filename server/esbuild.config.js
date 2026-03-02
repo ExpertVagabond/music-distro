@@ -1,7 +1,7 @@
 import { build } from "esbuild";
 import { chmodSync, renameSync, existsSync } from "fs";
 
-// Bundle MCP entry
+// Bundle MCP entry — externalize heavy deps so startup is fast
 await build({
   entryPoints: ["build/index.js"],
   bundle: true,
@@ -10,7 +10,7 @@ await build({
   format: "esm",
   outfile: "build/index.bundled.js",
   banner: { js: "#!/usr/bin/env node" },
-  external: [],
+  external: ["googleapis", "music-metadata", "node-id3"],
 });
 renameSync("build/index.bundled.js", "build/index.js");
 chmodSync("build/index.js", 0o755);
@@ -25,7 +25,7 @@ if (existsSync("build/server.js")) {
     format: "esm",
     outfile: "build/server.bundled.js",
     banner: { js: "#!/usr/bin/env node" },
-    external: [],
+    external: ["googleapis", "music-metadata", "node-id3"],
   });
   renameSync("build/server.bundled.js", "build/server.js");
   chmodSync("build/server.js", 0o755);
