@@ -1,0 +1,29 @@
+{
+  "name": "music-distro",
+  "version": "0.1.0",
+  "description": "Personal music distribution tool — catalog management, SoundCloud/YouTube uploads, MCP integration",
+  "type": "module",
+  "bin": {
+    "music-distro": "build/index.js"
+  },
+  "files": [
+    "build/index.js"
+  ],
+  "scripts": {
+    "build": "tsc && node esbuild.config.js",
+    "dev": "node build/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "googleapis": "^144.0.0",
+    "music-metadata": "^10.6.3",
+    "node-id3": "^0.2.6",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.2",
+    "typescript": "^5.8.2"
+  }
+}

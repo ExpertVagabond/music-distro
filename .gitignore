@@ -1,0 +1,6 @@
+node_modules/
+server/build/
+server/node_modules/
+.DS_Store
+*.env
+catalog.json

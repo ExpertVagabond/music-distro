@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Distro — Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">♫</span>
+      <h1>Music Distro</h1>
+    </div>
+    <div class="header-actions">
+      <button id="btn-scan" class="btn btn-secondary">Scan New</button>
+      <div id="auth-status" class="auth-badges"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="stats-bar" id="stats-bar">
+      <div class="stat"><span class="stat-value" id="stat-total">—</span><span class="stat-label">Tracks</span></div>
+      <div class="stat"><span class="stat-value" id="stat-sc">—</span><span class="stat-label">SoundCloud</span></div>
+      <div class="stat"><span class="stat-value" id="stat-yt">—</span><span class="stat-label">YouTube</span></div>
+      <div class="stat"><span class="stat-value" id="stat-pending">—</span><span class="stat-label">Pending</span></div>
+    </section>
+
+    <section class="tracks-section">
+      <h2>Catalog</h2>
+      <table id="tracks-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Artist</th>
+            <th>Genre</th>
+            <th>Duration</th>
+            <th>Files</th>
+            <th>SoundCloud</th>
+            <th>YouTube</th>
+          </tr>
+        </thead>
+        <tbody id="tracks-body"></tbody>
+      </table>
+      <p id="empty-state" class="empty-state" style="display:none">No tracks yet. Click <strong>Scan New</strong> to discover audio files.</p>
+    </section>
+
+    <section class="player-section" id="player-section" style="display:none">
+      <h3 id="player-title"></h3>
+      <audio id="audio-player" controls></audio>
+      <div id="track-details"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
