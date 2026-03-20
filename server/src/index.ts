@@ -42,6 +42,30 @@ function validatePath(value: unknown, fieldName: string): string {
   return s;
 }
 
+/** Redact internal file paths and credentials from error messages. */
+function redactError(err: unknown): string {
+  let msg = err instanceof Error ? err.message : String(err);
+  msg = msg.replace(/\/Users\/[^\s"']*/g, "[redacted-path]");
+  msg = msg.replace(/\/Volumes\/[^\s"']*/g, "[redacted-path]");
+  msg = msg.replace(/token[=:]\s*\S+/gi, "token=[REDACTED]");
+  if (msg.length > 500) msg = msg.slice(0, 500) + "... (truncated)";
+  return msg;
+}
+
+/** Sanitize all string parameters: strip null bytes and control characters. */
+function sanitizeParams(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!params || typeof params !== "object") return params;
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") {
+      cleaned[key] = value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
+    } else {
+      cleaned[key] = value;
+    }
+  }
+  return cleaned;
+}
+
 // --- Environment validation ---
 const requiredEnvHints = ["HOME"];
 for (const key of requiredEnvHints) {
@@ -115,12 +139,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
+    // Security: sanitize all incoming parameters
+    if (request.params.arguments) {
+      request.params.arguments = sanitizeParams(
+        request.params.arguments as Record<string, unknown>,
+      ) as typeof request.params.arguments;
+    }
     return await action.handler(request);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Redact potential file paths from error messages
-    const safe = message.replace(/\/[^\s]+/g, "[REDACTED_PATH]");
-    return errorResult(`Tool error: ${safe}`);
+    return errorResult(`Tool error: ${redactError(err)}`);
   }
 });
 
