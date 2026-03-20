@@ -62,8 +62,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 const config = loadConfig();
 validateConfig(config);
 console.error(`[music-distro] Starting with ${actions.length} tools`);
-console.error(`[music-distro] Output: ${config.outputDir}`);
-console.error(`[music-distro] Credentials: ${config.credsDir}`);
+// Sensitive paths (outputDir, credsDir) intentionally omitted from logs
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
