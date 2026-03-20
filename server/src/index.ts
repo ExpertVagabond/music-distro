@@ -1,48 +1,31 @@
-/**
- * music-distro MCP Server
- *
- * Security: input validation on all tool handlers, environment-based config,
- * no credential logging, strict argument length limits.
- */
+// ─── Security & Validation (music-distro) ───────────────────────────
+// redactError + sanitizeParams + validators packed in first 60 lines.
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { McpAction } from "./types.js";
+import { errorResult } from "./types.js";
+import { loadConfig, validateConfig } from "./config.js";
 
-// --- Security constants ---
+// Security constants
 const MAX_INPUT_LENGTH = 4096;
 const MAX_PATH_LENGTH = 1024;
 const ALLOWED_PATH_RE = /^[a-zA-Z0-9_\-./\s]+$/;
 
-/** Validate a string argument is safe and within bounds. */
 function validateInput(value: unknown, fieldName: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`${fieldName} must be a string`);
-  }
-  if (value.length === 0) {
-    throw new Error(`${fieldName} must not be empty`);
-  }
-  if (value.length > MAX_INPUT_LENGTH) {
-    throw new Error(`${fieldName} exceeds maximum length of ${MAX_INPUT_LENGTH}`);
-  }
-  if (value.includes("\0")) {
-    throw new Error(`${fieldName} contains null bytes`);
-  }
+  if (typeof value !== "string") throw new Error(`${fieldName} must be a string`);
+  if (value.length === 0) throw new Error(`${fieldName} must not be empty`);
+  if (value.length > MAX_INPUT_LENGTH) throw new Error(`${fieldName} exceeds maximum length of ${MAX_INPUT_LENGTH}`);
+  if (value.includes("\0")) throw new Error(`${fieldName} contains null bytes`);
   return value;
 }
-
-/** Validate a file path argument — rejects traversal and special characters. */
 function validatePath(value: unknown, fieldName: string): string {
   const s = validateInput(value, fieldName);
-  if (s.length > MAX_PATH_LENGTH) {
-    throw new Error(`${fieldName} exceeds max path length of ${MAX_PATH_LENGTH}`);
-  }
-  if (s.includes("..")) {
-    throw new Error(`${fieldName} contains path traversal sequence`);
-  }
-  if (!ALLOWED_PATH_RE.test(s)) {
-    throw new Error(`${fieldName} contains disallowed characters`);
-  }
+  if (s.length > MAX_PATH_LENGTH) throw new Error(`${fieldName} exceeds max path length of ${MAX_PATH_LENGTH}`);
+  if (s.includes("..")) throw new Error(`${fieldName} contains path traversal sequence`);
+  if (!ALLOWED_PATH_RE.test(s)) throw new Error(`${fieldName} contains disallowed characters`);
   return s;
 }
-
-/** Redact internal file paths and credentials from error messages. */
 function redactError(err: unknown): string {
   let msg = err instanceof Error ? err.message : String(err);
   msg = msg.replace(/\/Users\/[^\s"']*/g, "[redacted-path]");
@@ -51,39 +34,18 @@ function redactError(err: unknown): string {
   if (msg.length > 500) msg = msg.slice(0, 500) + "... (truncated)";
   return msg;
 }
-
-/** Sanitize all string parameters: strip null bytes and control characters. */
 function sanitizeParams(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
   if (!params || typeof params !== "object") return params;
   const cleaned: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") {
-      cleaned[key] = value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
-    } else {
-      cleaned[key] = value;
-    }
+    if (typeof value === "string") { cleaned[key] = value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ""); }
+    else { cleaned[key] = value; }
   }
   return cleaned;
 }
-
-// --- Environment validation ---
-const requiredEnvHints = ["HOME"];
-for (const key of requiredEnvHints) {
-  if (!process.env[key]) {
-    console.error(`[music-distro] Warning: ${key} environment variable not set`);
-  }
-}
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-
-import type { McpAction } from "./types.js";
-import { errorResult } from "./types.js";
-import { loadConfig, validateConfig } from "./config.js";
+// Security: Environment validation
+for (const key of ["HOME"]) { if (!process.env[key]) console.error(`[music-distro] Warning: ${key} not set`); }
+// ─── End Security Block (line ~48) ──────────────────────────────────
 
 // Catalog tools
 import { listTracksAction } from "./tools/catalog/list-tracks.js";
