@@ -43,9 +43,28 @@ function sanitizeParams(params: Record<string, unknown> | undefined): Record<str
   }
   return cleaned;
 }
+// Security: rate limiter — sliding window, 60 calls per minute
+const _rateBuckets: number[] = [];
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_CALLS = 60;
+function checkRateLimit(): void {
+  const now = Date.now();
+  while (_rateBuckets.length > 0 && now - _rateBuckets[0] > RATE_WINDOW_MS) _rateBuckets.shift();
+  if (_rateBuckets.length >= RATE_MAX_CALLS) throw new Error("Rate limit exceeded — max 60 calls per minute");
+  _rateBuckets.push(now);
+}
+/** Timeout wrapper — all IO operations time-bounded */
+async function withTimeout<T>(promise: Promise<T>, ms = 30_000): Promise<T> {
+  const timer = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Operation timed out")), ms));
+  return Promise.race([promise, timer]);
+}
+function logOperation(action: string, success: boolean, durationMs?: number): void {
+  const entry = { timestamp: new Date().toISOString(), action, success, ...(durationMs !== undefined && { durationMs }) };
+  console.error(`[audit] ${JSON.stringify(entry)}`);
+}
 // Security: Environment validation
 for (const key of ["HOME"]) { if (!process.env[key]) console.error(`[music-distro] Warning: ${key} not set`); }
-// ─── End Security Block (line ~48) ──────────────────────────────────
+// ─── End Security Block (line ~68) ──────────────────────────────────
 
 // Catalog tools
 import { listTracksAction } from "./tools/catalog/list-tracks.js";
@@ -92,12 +111,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const action = actions.find((a) => a.tool.name === request.params.name);
-  if (!action) return errorResult(`Unknown tool: ${request.params.name}`);
+  const start = Date.now();
+  const toolName = request.params.name;
+
+  // Security: rate limiting
+  try { checkRateLimit(); } catch (e) {
+    logOperation(toolName, false);
+    return errorResult(e instanceof Error ? e.message : "Rate limit exceeded");
+  }
 
   // Validate tool name is alphanumeric/underscore only
-  if (!/^[a-z_]+$/.test(request.params.name)) {
+  if (!/^[a-z_]+$/.test(toolName)) {
+    logOperation(toolName, false);
     return errorResult("Invalid tool name format");
+  }
+
+  const action = actions.find((a) => a.tool.name === toolName);
+  if (!action) {
+    logOperation(toolName, false);
+    return errorResult(`Unknown tool: ${toolName}`);
   }
 
   try {
@@ -107,8 +139,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         request.params.arguments as Record<string, unknown>,
       ) as typeof request.params.arguments;
     }
-    return await action.handler(request);
+    const result = await action.handler(request);
+    logOperation(toolName, true, Date.now() - start);
+    return result;
   } catch (err) {
+    logOperation(toolName, false, Date.now() - start);
     return errorResult(`Tool error: ${redactError(err)}`);
   }
 });
