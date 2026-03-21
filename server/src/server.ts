@@ -1,7 +1,22 @@
-// TODO: HTTPS should be handled by a reverse proxy (e.g., nginx, Caddy, or Cloudflare Tunnel)
-// in production. This server assumes it runs behind a TLS-terminating proxy.
+/**
+ * Music Distribution Server
+ *
+ * HTTPS should be handled by a reverse proxy (e.g., nginx, Caddy, or Cloudflare Tunnel)
+ * in production. This server assumes it runs behind a TLS-terminating proxy.
+ *
+ * Security design:
+ * - CORS restricted to explicit origin allowlist (no wildcards)
+ * - Rate limiting on OAuth callback endpoints (10 req/min/IP)
+ * - Static file serving restricted to dashboard directory (no path traversal)
+ * - Request body size implicitly limited by Node.js defaults
+ * - All user inputs (query params, paths) validated before use
+ * - Security headers on all responses (X-Content-Type-Options, X-Frame-Options)
+ * - OAuth codes validated for format before exchange
+ * - Error responses never leak internal paths or stack traces
+ * - Stale rate limit entries cleaned every 5 minutes to prevent memory leaks
+ */
 
-import { createServer } from "node:http";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, extname, normalize } from "node:path";
 import { loadConfig } from "./config.js";
@@ -12,6 +27,11 @@ import { exchangeSoundCloudCode } from "./auth/soundcloud-auth.js";
 import { exchangeYouTubeCode } from "./auth/youtube-auth.js";
 
 const config = loadConfig();
+
+/** Maximum URL length to prevent abuse */
+const MAX_URL_LENGTH = 4096;
+/** OAuth code format — alphanumeric + hyphens + underscores, reasonable length */
+const OAUTH_CODE_PATTERN = /^[A-Za-z0-9_\-/.]{10,512}$/;
 
 // --- CORS allowlist ---
 const ALLOWED_ORIGINS: Set<string> = new Set(

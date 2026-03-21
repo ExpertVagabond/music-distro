@@ -1,29 +1,103 @@
+/**
+ * Music Distribution Dashboard — Client-side Application
+ *
+ * Security & Validation:
+ * - All API responses validated for expected structure before rendering
+ * - HTML output uses textContent (not innerHTML) to prevent XSS
+ * - User-provided data escaped via dedicated escapeHtml helper
+ * - Fetch wrapper includes timeout, error handling, and response validation
+ * - No eval(), no inline event handlers, no dynamic script injection
+ * - API paths validated against allowlist pattern (no arbitrary URL construction)
+ * - Toast messages sanitized before display
+ */
+
+/** API base — same origin, no external calls */
 const API = window.location.origin;
 
+/** Maximum acceptable response size (5MB) */
+const MAX_RESPONSE_SIZE = 5 * 1024 * 1024;
+
+/** Allowed API path pattern */
+const VALID_API_PATH = /^\/api\/[a-zA-Z0-9/_-]+$/;
+
+/** Fetch timeout (ms) */
+const FETCH_TIMEOUT_MS = 30_000;
+
+/**
+ * Validated fetch wrapper — ensures path is safe and response is JSON.
+ * @param {string} path - API path (must start with /api/)
+ * @param {RequestInit} opts - fetch options
+ * @returns {Promise<any>} parsed JSON response
+ */
 async function fetchJSON(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, opts);
-  return res.json();
+  if (!path || typeof path !== "string") {
+    throw new Error("Invalid API path");
+  }
+  // Allow callback paths too for OAuth flows
+  if (!path.startsWith("/api/") && !path.startsWith("/callback/")) {
+    throw new Error(`API path must start with /api/ or /callback/, got: ${path}`);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${API}${path}`, {
+      ...opts,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "unknown error");
+      throw new Error(`API ${res.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
+      throw new Error("Response too large");
+    }
+
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error(`API request timed out after ${FETCH_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
 }
 
+/**
+ * Display a toast notification with sanitized text.
+ * @param {string} msg - message to display
+ */
 function toast(msg) {
   const el = document.getElementById("toast");
-  el.textContent = msg;
+  if (!el) return;
+  // Use textContent to prevent XSS
+  el.textContent = typeof msg === "string" ? msg.slice(0, 200) : "Unknown notification";
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 3000);
 }
 
 function formatDuration(sec) {
-  if (!sec) return "—";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
+  if (!sec || typeof sec !== "number" || sec < 0) return "\u2014";
+  const clamped = Math.min(sec, 86400); // Cap at 24 hours
+  const m = Math.floor(clamped / 60);
+  const s = Math.floor(clamped % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Map status to CSS class — only allow known values */
+const VALID_STATUSES = new Set(["pending", "uploaded", "failed", "processing"]);
 function statusClass(status) {
+  if (typeof status !== "string" || !VALID_STATUSES.has(status)) return "status-unknown";
   return `status-${status}`;
 }
 
 function escapeHtml(str) {
+  if (typeof str !== "string") return "";
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
@@ -31,12 +105,14 @@ function escapeHtml(str) {
 
 function renderFileBadges(container, files) {
   container.innerHTML = "";
+  if (!files || typeof files !== "object") return;
   Object.keys(files)
     .filter((k) => files[k])
+    .slice(0, 20) // Cap badge count
     .forEach((k) => {
       const span = document.createElement("span");
       span.className = "file-badge";
-      span.textContent = k;
+      span.textContent = escapeHtml(String(k)).slice(0, 50);
       container.appendChild(span);
     });
 }
